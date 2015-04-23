@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-    lantz_drivers.bilt.cards.be2100
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    lantz_drivers.bilt.common
+    ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    Driver for the Bilt BE2100 card : high stability DC voltage source.
+    Common driver for Bilt cards.
 
     :copyright: 2015 by The Lantz Authors
     :license: BSD, see LICENSE for more details.
@@ -11,11 +11,11 @@
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
-from .common import BN100Card
+from lantz_core.channel import Channel
 
 
-class BE2100(BN100Card):
-    """Driver for the Bilt BN100 chassis.
+class BN100Card(Channel):
+    """Base driver for cards used with the Bilt BN100 chassis.
 
     """
     pass
