@@ -1,50 +1,66 @@
 # -*- coding: utf-8 -*-
+"""
+    lantz_drivers.standards.dc_sources
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+    Definition of the standard expected from DC sources.
+
+    :copyright: 2015 by The Lantz Authors
+    :license: BSD, see LICENSE for more details.
+"""
+from __future__ import (division, unicode_literals, print_function,
+                        absolute_import)
 from lantz_core.has_features import HasFeatures, set_feat
 from lantz_core.features.mappings import Mapping, Bool
 from lantz_core.features.scalars import Float
 
 
 class DCVoltageSource(HasFeatures):
+    """Basic DC voltage source.
+
     """
-    """
 
-    #:
-    output = Bool()
+    #: Status of the output.
+    output = Bool(aliases={True: ['On', 'ON', 'On'],
+                           False: ['Off', 'OFF', 'off']})
 
-    #:
-    voltage = Float()
+    #: Voltage applied on the ouput if on.
+    voltage = Float(unit='V')
 
-    #:
-    voltage_range = Mapping()
+    #: Selected range for the voltage.
+    voltage_range = Float(unit='V')
 
 
 class DCCurrentSource(HasFeatures):
+    """Basic DC current source.
+
     """
-    """
 
-    #:
-    output = Bool()
+    #: Status of the output.
+    output = Bool(aliases={True: ['On', 'ON', 'On'],
+                           False: ['Off', 'OFF', 'off']})
 
-    #:
-    current = Float()
+    #: Current flowing if the ouput is on.
+    current = Float(unit='A')
 
-    #:
-    current_range = Mapping()
+    #: Slected range for the current.
+    current_range = Float(unit='A')
 
 
 class DCPowerSource(DCVoltageSource, DCCurrentSource):
+    """Basic DC power source whose ouput can be expressed either in term
+    of voltage or currnet.
+
     """
-    """
 
-    #:
-    function = Mapping()
+    #: Selected mode of operation.
+    function = Mapping(mapping={'Voltage': '', 'Current': ''})
 
-    #:
-    voltage_limit = Mapping(checks="{function}=='Current'")
+    #: Maximal voltage to apply in 'Current' mode.
+    voltage_limit = Float(checks="{function}=='Current'", unit='V')
 
-    #:
-    current_limit = Mapping(checks="{function}=='Voltage'")
+    #: Maximal current to deliver in 'Voltage' mode.
+    current_limit = Float(checks="{function}=='Voltage'", unit='A')
 
     voltage = set_feat(checks="{function}=='Voltage'")
 
