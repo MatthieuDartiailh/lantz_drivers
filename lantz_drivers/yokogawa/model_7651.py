@@ -7,12 +7,12 @@
 
     :copyright: 2015 by The Lantz Authors
     :license: BSD, see LICENSE for more details.
+
 """
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
 from lantz_core.has_features import set_feat
-from lantz_core.action import Action
 from lantz_core.limits import FloatLimitsValidator
 from lantz_core.backends.visa import VisaMessageDriver
 
@@ -52,10 +52,11 @@ class Yokogawa7651(VisaMessageDriver, DCPowerSource):
                        limits='voltage',
                        extract='{_}DC{_}{:E+}')
 
-    # Will wait decision about mapping for float, int, unicode
     voltage_range = set_feat(getter=True,
                              setter=':SOUR:RANG {:E}',
-                             values=(10e-3, 100e-3, 1.0, 10.0, 30.0),
+                             extract='{_},R{},{}',
+                             mapping={10e-3: 2, 100e-3: 3, 1.0: 4, 10.0: 5,
+                                      30.0: 6},
                              discard={'limits': 'voltage'})
 
     current_limit = set_feat(getter=True,
@@ -67,29 +68,23 @@ class Yokogawa7651(VisaMessageDriver, DCPowerSource):
                        limits='current',
                        extract='{_}DC{_}{:E+}')
 
-    # Will wait decision about mapping for float, int, unicode
     current_range = set_feat(getter=':SOURce:RANGe?',
                              setter=':SOURce:RANGe {:E}',
-                             values=(1e-3, 10e-3, 100e-3),
-                             discard={'limits': 'current'})
+                             values={1e-3: 4, 10e-3: 5, 100e-3: 6},
+                             discard={'limits': ('current',)})
 
     voltage_limit = set_feat(getter=True,
                              setter='LV{}E',
                              limits=(1.0, 30.0, 1))
 
-    @Action
-    def read_errors(self):
-        """Read the error message available in the queue.
-
-        """
-        pass
-
     def default_check_operation(self, feat, value, i_value, state=None):
         """Check that the operation did not result in any error.
 
         """
-        if self.status_byte[6]:
-            return False, self.read_errors()
+        stb = self.read_status_byte()
+        if stb[6]:
+            msg = 'Syntax error' if stb[3] else 'Overload'
+            return False, msg
 
         return True, None
 
@@ -115,24 +110,33 @@ class Yokogawa7651(VisaMessageDriver, DCPowerSource):
         """Read the output current status byte and extract the output state.
 
         """
-        return bool(int(self.query('OC')) & 16)
+        return bool(int(self.query('OC')[5::]) & 16)
 
-    def _get_voltage_range(self):
-        """
-        """
-        pass
+    def _get_range(self):
+        """Read the range.
 
-    def _get_current_range(self):
         """
-        """
-        pass
+        self.write('OS')
+        self.read()  # Model and software version
+        msg = self.read()  # Function, range, output data
+        self.read()  # Program parameters
+        self.read()  # Limits
+        return msg
 
-    def _get_current_limit(self):
-        """
-        """
-        pass
+    _get_voltage_range = _get_range
 
-    def _get_voltage_limit(self):
+    _get_current_range = _get_range
+
+    def _get_limit(self):
+        """Read the limiter value.
+
         """
-        """
-        pass
+        self.write('OS')
+        self.read()  # Model and software version
+        self.read()  # Function, range, output data
+        self.read()  # Program parameters
+        return self.read()  # Limits
+
+    _get_current_limit = _get_limit
+
+    _get_voltage_limit = _get_limit

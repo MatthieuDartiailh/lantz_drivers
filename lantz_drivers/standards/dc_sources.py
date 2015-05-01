@@ -11,8 +11,9 @@
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 from lantz_core.has_features import HasFeatures, set_feat
-from lantz_core.features.mappings import Mapping, Bool
-from lantz_core.features.scalars import Float
+from lantz_core.features.mappings import Bool
+from lantz_core.features.scalars import Float, Unicode
+from lantz_core.action import Action
 
 
 class DCVoltageSource(HasFeatures):
@@ -54,7 +55,7 @@ class DCPowerSource(DCVoltageSource, DCCurrentSource):
     """
 
     #: Selected mode of operation.
-    function = Mapping(mapping={'Voltage': '', 'Current': ''})
+    function = Unicode(mapping={'Voltage': '', 'Current': ''})
 
     #: Maximal voltage to apply in 'Current' mode.
     voltage_limit = Float(checks="{function}=='Current'", unit='V')
