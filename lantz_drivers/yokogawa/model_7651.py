@@ -92,19 +92,19 @@ class Yokogawa7651(VisaMessageDriver, DCPowerSource):
         """Determine the voltage limits based on the currently selected range.
 
         """
-        ran = self.voltage_range
+        ran = float(self.voltage_range)  # Casting handling possible Quantity
         res = VOLTAGE_RESOLUTION[ran]
         ran *= 1.2
-        return FloatLimitsValidator(-ran, ran, res)
+        return FloatLimitsValidator(-ran, ran, res, 'V')
 
     def _limits_current(self):
         """Determine the current limits based on the currently selected range.
 
         """
-        ran = self.current_range
+        ran = float(self.current_range)  # Casting handling possible Quantity
         res = CURRENT_RESOLUTION[ran]
         ran *= 1.2
-        return FloatLimitsValidator(-ran, ran, res)
+        return FloatLimitsValidator(-ran, ran, res, 'A')
 
     def _get_ouput(self):
         """Read the output current status byte and extract the output state.

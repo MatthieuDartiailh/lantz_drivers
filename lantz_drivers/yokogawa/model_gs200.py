@@ -61,18 +61,18 @@ class YokogawaGS200(SCPIDCPowerSource):
         """Determine the voltage limits based on the currently selected range.
 
         """
-        ran = self.voltage_range
+        ran = float(self.voltage_range)  # Casting handling possible Quantity
         res = VOLTAGE_RESOLUTION[ran]
         if ran != 30.0:
             ran *= 1.2
-        return FloatLimitsValidator(-ran, ran, res)
+        return FloatLimitsValidator(-ran, ran, res, 'V')
 
     def _limits_current(self):
         """Determine the current limits based on the currently selected range.
 
         """
-        ran = self.current_range
+        ran = float(self.current_range)  # Casting handling possible Quantity
         res = CURRENT_RESOLUTION[ran]
         if ran != 200e-3:
             ran *= 1.2
-        return FloatLimitsValidator(-ran, ran, res)
+        return FloatLimitsValidator(-ran, ran, res, 'A')
