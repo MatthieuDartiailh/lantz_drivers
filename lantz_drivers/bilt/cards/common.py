@@ -58,10 +58,3 @@ class BN100Card(Channel):
         """
         cmd = 'I{ch_id};'+cmd
         super(BN100Card, self).default_set_feature(feat, cmd, *args, **kwargs)
-
-    def default_check_operation(self, feat, value, i_value, response):
-        """Check if an error is present in the error queue.
-
-        """
-        err = self.parent.read_error()
-        return bool(err), err

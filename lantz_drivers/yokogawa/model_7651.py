@@ -54,13 +54,14 @@ class Yokogawa7651(VisaMessageDriver, DCPowerSource):
 
     voltage_range = set_feat(getter=True,
                              setter=':SOUR:RANG {:E}',
-                             extract='{_},R{},{}',
+                             extract='F1R{}S{_}',
                              mapping={10e-3: 2, 100e-3: 3, 1.0: 4, 10.0: 5,
                                       30.0: 6},
                              discard={'limits': 'voltage'})
 
     current_limit = set_feat(getter=True,
                              setter='LA{}E',
+                             extract='LV{_}LA{}',
                              limits=(5e-3, 120e-3, 1e-3))
 
     current = set_feat(getter='OD',
@@ -68,14 +69,28 @@ class Yokogawa7651(VisaMessageDriver, DCPowerSource):
                        limits='current',
                        extract='{_}DC{_}{:E+}')
 
-    current_range = set_feat(getter=':SOURce:RANGe?',
+    current_range = set_feat(getter=True,
                              setter=':SOURce:RANGe {:E}',
-                             values={1e-3: 4, 10e-3: 5, 100e-3: 6},
+                             extract='F5R{}S{_}',
+                             mapping={1e-3: 4, 10e-3: 5, 100e-3: 6},
                              discard={'limits': ('current',)})
 
     voltage_limit = set_feat(getter=True,
                              setter='LV{}E',
+                             extract='LV{}LA{_}',
                              limits=(1.0, 30.0, 1))
+
+    PROTOCOLS = {'GPIB': 'INSTR'}
+
+    DEFAULTS = {'COMMON': {'read_termination': '\r\n'},
+                'ASRL': {'write_termination': '\r\n'}}
+
+    def initialize(self):
+        """Set the data termination.
+
+        """
+        super(Yokogawa7651, self).initialize()
+        self.write('DL0')
 
     def default_check_operation(self, feat, value, i_value, state=None):
         """Check that the operation did not result in any error.

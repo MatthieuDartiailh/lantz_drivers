@@ -24,6 +24,12 @@ class BN100(VisaMessageDriver):
 
     """
 
+    PROTOCOLS = {'TCPIP': '5025::SOCKET'}
+
+    DEFAULTS = {'COMMON': {'read_termination': '\n',
+                           'write_termination': '\n'}
+                }
+
     be2100 = channel('_list_be2100', BE2100)
 
     def initialize(self):
@@ -38,6 +44,14 @@ class BN100(VisaMessageDriver):
         """Read the first error in the error queue.
 
         """
-        return self.query('SYST:ERR?')
+        code, msg = self.query('SYST:ERR?').split(',')
+        return int(code), msg
+
+    def default_check_operation(self, feat, value, i_value, response):
+        """Check if an error is present in the error queue.
+
+        """
+        code, msg = self.read_error()
+        return bool(code), msg
 
     _list_be2100 = detect_be2100

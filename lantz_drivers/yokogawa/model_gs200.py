@@ -48,6 +48,14 @@ class YokogawaGS200(SCPIDCPowerSource):
 
     voltage_limit = set_feat(limits=(1.0, 30.0, 1))
 
+    PROTOCOLS = {'GPIB': 'INSTR', 'USB': 'INSTR', 'TCPIP': 'INSTR'}
+
+    DEFAULTS = {'COMMON': {'read_termination': '\n'}}
+
+    MANUFACTURER_ID = 0xB21
+
+    MODEL_CODE = 0x39
+
     def default_check_operation(self, feat, value, i_value, state=None):
         """Check that the operation did not result in any error.
 

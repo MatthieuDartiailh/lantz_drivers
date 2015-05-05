@@ -54,7 +54,7 @@ class BE2100(BN100Card, DCVoltageSource):
         vs.high = Float('VOLT:SAT:POS?', 'VOLT:SAT:POS {}', unit='V',
                         limits=(-12, 0), discard={'limits': 'voltage'})
 
-    #: Subsystem handling reaction to triggering.
+    #: Subsystem handling triggering and reaction to triggering.
     trigger = subsystem()
     with trigger as tr:
         #: Type of response to triggering :
