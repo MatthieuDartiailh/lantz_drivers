@@ -14,6 +14,9 @@ from __future__ import (division, unicode_literals, print_function,
 from lantz_core.has_features import set_feat
 from lantz_core.limits import FloatLimitsValidator
 
+from ..standards.ieee488 import (InternalOperations, StatusReporting,
+                                 OperationComplete, OptionsIdentification,
+                                 StoredSettings)
 from ..standards.scpi.dc_sources import SCPIDCPowerSource
 
 VOLTAGE_RESOLUTION = {10e-3: 1e-7,
@@ -28,7 +31,9 @@ CURRENT_RESOLUTION = {1e-3: 1e-8,
                       200e-3: 1e-6}
 
 
-class YokogawaGS200(SCPIDCPowerSource):
+class YokogawaGS200(SCPIDCPowerSource, InternalOperations, StatusReporting,
+                    OperationComplete, OptionsIdentification,
+                    StoredSettings):
     """Driver for the Yokogawa GS200 DC power source.
 
     """
