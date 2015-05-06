@@ -11,9 +11,7 @@
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 from lantz_core.has_features import HasFeatures, set_feat
-from lantz_core.features.mappings import Bool
-from lantz_core.features.scalars import Float, Unicode
-from lantz_core.action import Action
+from lantz_core.features import Bool, Float, Unicode
 
 
 class DCVoltageSource(HasFeatures):
