@@ -191,12 +191,17 @@ class Identify(VisaMessageDriver):
     """Class implementing the identification command.
 
     """
-    @Action()
-    def read_idn(self):
-        """Read the instrument id.
+    #: Id of the instrument.
+    idn = Unicode('*IDN?')
 
-        """
-        return self.query('*IDN')
+    @property
+    def connected(self):
+        try:
+            self.query('*IDN?')
+        except Exception:
+            return False
+
+        return True
 
 
 class SelfTest(VisaMessageDriver):
