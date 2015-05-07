@@ -7,21 +7,18 @@
 
     :copyright: 2015 by The Lantz Authors
     :license: BSD, see LICENSE for more details.
-"""
-#from time import sleep
-#from timeit import default_timer
 
+"""
 from lantz_core.has_features import channel, set_feat
-from lantz_core.base_driver import BaseDriver
 from lantz_core.channel import Channel
-from lantz_core.features import Unicode, Float, Bool, Feature
+from lantz_core.features import Unicode, Float, Feature, Int
 from lantz_core.action import Action
-from lantz_core.errors import InvalidCommand
-from lantz_core.backends.visa import errors
+from lantz_core.errors import InvalidCommand, LantzError
+from lantz_core.backends.visa import VisaMessageBased
 from lantz_core.unit import UNIT_SUPPORT, get_unit_registry
 
 
-def check_answer(msg):
+def check_answer(res, msg):
     """Check the message returned by the ANC for errors.
 
     Parameters
@@ -35,7 +32,7 @@ def check_answer(msg):
         Raised if an error was signaled by the instrument.
 
     """
-    if 'ERROR\r\n' in msg:
+    if not res:
         err = ' '.join(msg.split('\r\n')[:-1])
         raise InvalidCommand(err)
 
@@ -59,16 +56,16 @@ class ANCModule(Channel):
         """Stop any motion.
 
         """
-        msg = self.parent.anc_query('stop {}'.format(self.ch_id))
-        check_answer(msg)
+        res, msg = self.parent.anc_query('stop {}'.format(self.ch_id))
+        check_answer(res, msg)
 
     @Action(units=('V', (None)))
     def read_output_voltage(self):
         """Read the voltage currently applied on the module.
 
         """
-        msg = self.parent.anc_query('geto {}'.format((self.ch_id)))
-        check_answer(msg)
+        res, msg = self.parent.anc_query('geto {}'.format((self.ch_id)))
+        check_answer(res, msg)
         return float(msg.split('\r\n')[0])
 
     @Action(units=('muF', (None)))
@@ -76,37 +73,37 @@ class ANCModule(Channel):
         """Read the saved capacitance load for this module.
 
         """
-        msg = self.parent.anc_query('getc {}'.format((self.ch_id)))
-        check_answer(msg)
+        res, msg = self.parent.anc_query('getc {}'.format((self.ch_id)))
+        check_answer(res, msg)
         val = msg.split('\r\n')[0]
         return float(msg.split('\r\n')[0]) if val != '?' else None
 
-    @Action()
-    def measure_capacitance(self, block=False, timeout=10):
-        """Ask the system to measure the capacitance.
-
-        Parameters
-        ----------
-        block : bool, optional
-            Whether or not to wait on the measure to finish before returning.
-        timeout : float, optional
-            Timeout to use when wait for measure completion.
-
-        Returns
-        -------
-        value : float, Quantity or None
-            Return the new measured value if block is True, else return None.
-            The value can be read at a later time using read_saved_capacitance,
-            but first wait_for_capacitance_measure should be called to ensure
-            that the measure is over.
-
-        """
-        with self.lock():
-            self.clear_cache(features=('saved_capacitance', 'mode'))
-            self.parent.write('setm {} cap'.format(self.ch_id))
-            if block:
-                self.wait_for_capacitance_measure(timeout)
-                return self.read_saved_capacitance()
+#    @Action()
+#    def measure_capacitance(self, block=False, timeout=10):
+#        """Ask the system to measure the capacitance.
+#
+#        Parameters
+#        ----------
+#        block : bool, optional
+#            Whether or not to wait on the measure to finish before returning.
+#        timeout : float, optional
+#            Timeout to use when wait for measure completion.
+#
+#        Returns
+#        -------
+#        value : float, Quantity or None
+#            Return the new measured value if block is True, else return None.
+#            The value can be read at a later time using read_saved_capacitance
+#            but first wait_for_capacitance_measure should be called to ensure
+#            that the measure is over.
+#
+#        """
+#        with self.lock():
+#            self.clear_cache(features=('saved_capacitance', 'mode'))
+#            self.parent.anc_query('setm {} cap'.format(self.ch_id))
+#            if block:
+#                self.wait_for_capacitance_measure(timeout)
+#                return self.read_saved_capacitance()
 
 #    @Action()
 #    def wait_for_capacitance_measure(self, timeout=10):
@@ -158,9 +155,15 @@ class ANCStepper(ANCModule):
     amplitude = Float('getv {ch_id}', 'setv {ch_id} {}', unit='V',
                       limits=(0, 150, 1e-3), discard={'limits': ['frequency']})
 
+    #: Trigger triggering an up step
+    up_trigger = Int('gettu {ch_id}', 'settu {ch_id} {}', values=range(1, 8))
+
+    #: Trigger triggering a down step
+    down_trigger = Int('gettd {ch_id}', 'settd {ch_id} {}', values=range(1, 8))
+
     mode = set_feat(mapping={'Ground': 'gnd', 'Step': 'stp'})
 
-    @Action()
+    @Action(checks='driver.mode == "Step"')
     def step(self, direction, steps):
         """Execute steps in the positive direction.
 
@@ -179,8 +182,8 @@ class ANCStepper(ANCModule):
         steps = 'c' if steps < 1 else steps
         cmd = 'stepu' if direction == 'Up' else 'stepd'
         cmd += ' {} {}'
-        msg = self.parent.anc_query(cmd.format(self.ch_id, steps))
-        check_answer(msg)
+        res, msg = self.parent.anc_query(cmd.format(self.ch_id, steps))
+        check_answer(res, msg)
 
 #    @Action()
 #    def wait_for_stepping_end(self):
@@ -188,9 +191,125 @@ class ANCStepper(ANCModule):
 #        """
 #        pass
 
+    def _limits_frequency(self):
+        """Compute the limit frequency from the current voltage and measured
+        capacitance.
+
+        """
+        pass
+
+
+# TODO implement
 class ANCScanner(ANCModule):
+    """Base class for ANC scanning modules.
+
+    """
     pass
 
 
-class ANC300(BaseDriver):
-    pass
+# TODO add ANM200 and ANM300 modules.
+class ANC300(VisaMessageBased):
+    """Driver for the ANC300 piezo controller.
+
+    Notes
+    -----
+    If you set a password different from the default one on your system
+    you should pass it under the key password in the connection_infos
+
+    """
+    PROTOCOLES = {'TCPIP': '7230::SOCKET'}
+
+    DEFAULTS = {'COMMONS': {'write_termination': '\r\n',
+                            'read_termination': '\r\n'}}
+
+    #: Drivers of the ANM150 modules.
+    anm150 = channel('_available_anm150', ANCStepper, cache=True)
+
+    def __init__(self, connection_infos, caching_allowed=True):
+        """Extract the password from the connection info.
+
+        """
+        super(ANC300, self).__init__(connection_infos, caching_allowed)
+        self.password = connection_infos.get('password', '123456')
+
+    def initialize(self):
+        """Handle autentification after connection opening.
+
+
+        """
+        super(ANC300, self).initialize()
+        self.write(self.password)
+        # First line contains non-ascii characters
+        try:
+            self.read()
+        except UnicodeDecodeError:
+            pass
+
+        self.read()  # Get stupid infos.
+        self.read()  # Get authentification request with given password.
+        msg = self.read()  # Get authentification status
+
+        if msg != 'Authentification success':
+            raise LantzError('Failed to authentify :' + msg)
+
+        res, msg = self.anc_query('echo off')  # Desactivate command echo
+        check_answer(res, msg)
+
+    @property
+    def connected(self):
+        """Query the serial number to check connection.
+
+        """
+        try:
+            self.anc_query('ver')
+        except Exception:
+            return False
+
+        return True
+
+    def anc_query(self, msg):
+        """Special query taking into account that answer can be multiple lines
+        and are termintaed either with OK or ERROR.
+
+        """
+        self.write(msg)
+        answer = ''
+        while True:
+            ans = self.read()
+            if ans in ('OK', 'ERROR'):
+                break
+            else:
+                answer += ans + '\n'
+
+        return True if ans == 'OK' else False, answer.rstrip()
+
+    # =========================================================================
+    # --- Private API ---------------------------------------------------------
+    # =========================================================================
+
+    def _list_anm150(self):
+        """List the ANM150 modules installed on that rack.
+
+        """
+        anm150 = []
+        for i in self._modules:
+            res, msg = self.anc_query('getser {}'.format(i))
+            if msg.startswith('ANM150'):
+                anm150.append(i)
+
+        return anm150
+
+    def _list_modules(self):
+        """List the modules installed on the rack.
+
+        """
+        if not hasattr(self, '_modules'):
+            modules = []
+            for i in range(1, 8):
+                res, msg = self.anc_query('getser {}'.format(i))
+                if res:
+                    modules.append(i)
+
+            self._modules = modules
+
+        return self._modules
