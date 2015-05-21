@@ -9,12 +9,15 @@
     :license: BSD, see LICENSE for more details.
 
 """
+from time import sleep
+from timeit import default_timer
+
 from lantz_core.has_features import channel, set_feat
 from lantz_core.channel import Channel
 from lantz_core.features import Unicode, Float, Feature, Int
 from lantz_core.action import Action
 from lantz_core.errors import InvalidCommand, LantzError
-from lantz_core.backends.visa import VisaMessageBased
+from lantz_core.backends.visa import VisaMessageBased, errors
 from lantz_core.unit import UNIT_SUPPORT, get_unit_registry
 
 
@@ -24,7 +27,7 @@ def check_answer(res, msg):
     Parameters
     ----------
     msg : unicode
-        Answer to the a command sent to the ANC300.
+        Answer to the command sent to the ANC300.
 
     Raises
     ------
@@ -78,57 +81,57 @@ class ANCModule(Channel):
         val = msg.split('\r\n')[0]
         return float(msg.split('\r\n')[0]) if val != '?' else None
 
-#    @Action()
-#    def measure_capacitance(self, block=False, timeout=10):
-#        """Ask the system to measure the capacitance.
-#
-#        Parameters
-#        ----------
-#        block : bool, optional
-#            Whether or not to wait on the measure to finish before returning.
-#        timeout : float, optional
-#            Timeout to use when wait for measure completion.
-#
-#        Returns
-#        -------
-#        value : float, Quantity or None
-#            Return the new measured value if block is True, else return None.
-#            The value can be read at a later time using read_saved_capacitance
-#            but first wait_for_capacitance_measure should be called to ensure
-#            that the measure is over.
-#
-#        """
-#        with self.lock():
-#            self.clear_cache(features=('saved_capacitance', 'mode'))
-#            self.parent.anc_query('setm {} cap'.format(self.ch_id))
-#            if block:
-#                self.wait_for_capacitance_measure(timeout)
-#                return self.read_saved_capacitance()
+    @Action()
+    def measure_capacitance(self, block=False, timeout=10):
+        """Ask the system to measure the capacitance.
 
-#    @Action()
-#    def wait_for_capacitance_measure(self, timeout=10):
-#        """Wait for the capacitance measurement to finish.
-#
-#        """
-#        with self.lock():
-#            self.parent.write('capw')
-#            self._wait_for(timeout)
-#
-#    def _wait_for(self, timeout):
-#        """Wait for completion of an operation.
-#
-#        """
-#        t = 0
-#        while t < timeout:
-#            try:
-#                tic = default_timer()
-#                msg = self.parent.read()
-#                check_answer(msg)
-#            except errors.VisaIOError as e:
-#                if e.error_code != errors.VI_ERROR_TMO:
-#                    raise
-#                sleep(0.1)
-#                t += default_timer() - tic
+        Parameters
+        ----------
+        block : bool, optional
+            Whether or not to wait on the measure to finish before returning.
+        timeout : float, optional
+            Timeout to use when waiting for measure completion.
+
+        Returns
+        -------
+        value : float, Quantity or None
+            Return the new measured value if block is True, else return None.
+            The value can be read at a later time using read_saved_capacitance
+            but first wait_for_capacitance_measure should be called to ensure
+            that the measure is over.
+
+        """
+        with self.lock():
+            self.clear_cache(features=('saved_capacitance', 'mode'))
+            self.parent.anc_query('setm {} cap'.format(self.ch_id))
+            if block:
+                self.wait_for_capacitance_measure(timeout)
+                return self.read_saved_capacitance()
+
+    @Action()
+    def wait_for_capacitance_measure(self, timeout=10):
+        """Wait for the capacitance measurement to finish.
+
+        """
+        with self.lock():
+            self.parent.write('capw {}'.format(self.ch_id))
+            self._wait_for(timeout)
+
+    def _wait_for(self, timeout):
+        """Wait for completion of an operation.
+
+        """
+        t = 0
+        while t < timeout:
+            try:
+                tic = default_timer()
+                msg = self.parent.read()
+                check_answer(msg)
+            except errors.VisaIOError as e:
+                if e.error_code != errors.VI_ERROR_TMO:
+                    raise
+                sleep(0.1)
+                t += default_timer() - tic
 
     def _post_get_saved_capacitance(self, feat, value):
         """Transform the value returned by the instrument.
@@ -163,7 +166,7 @@ class ANCStepper(ANCModule):
 
     mode = set_feat(mapping={'Ground': 'gnd', 'Step': 'stp'})
 
-    @Action(checks='driver.mode == "Step"')
+    @Action(checks='self.mode == "Step";direction in ("Up", "Down"')
     def step(self, direction, steps):
         """Execute steps in the positive direction.
 
@@ -177,20 +180,22 @@ class ANCStepper(ANCModule):
             indicate a continuous sweep.
 
         """
-        assert self.mode == 'Step',\
-            'Can step only in "Step" mode not %s' % self.mode
         steps = 'c' if steps < 1 else steps
         cmd = 'stepu' if direction == 'Up' else 'stepd'
         cmd += ' {} {}'
         res, msg = self.parent.anc_query(cmd.format(self.ch_id, steps))
         check_answer(res, msg)
 
-#    @Action()
-#    def wait_for_stepping_end(self):
-#        """
-#        """
-#        pass
+    @Action()
+    def wait_for_stepping_end(self, timeout=10):
+        """Wait for the current stepping operation to end.
 
+        """
+        with self.lock():
+            self.parent.write('setpw {}'.format(self.ch_id))
+            self._wait_for(timeout)
+
+    # XXXX
     def _limits_frequency(self):
         """Compute the limit frequency from the current voltage and measured
         capacitance.
@@ -272,14 +277,15 @@ class ANC300(VisaMessageBased):
         and are termintaed either with OK or ERROR.
 
         """
-        self.write(msg)
-        answer = ''
-        while True:
-            ans = self.read()
-            if ans in ('OK', 'ERROR'):
-                break
-            else:
-                answer += ans + '\n'
+        with self.lock:
+            self.write(msg)
+            answer = ''
+            while True:
+                ans = self.read()
+                if ans in ('OK', 'ERROR'):
+                    break
+                else:
+                    answer += ans + '\n'
 
         return True if ans == 'OK' else False, answer.rstrip()
 
