@@ -12,12 +12,16 @@
 from time import sleep
 from timeit import default_timer
 
+from stringparser import Parser
+
 from lantz_core.has_features import channel, set_feat
 from lantz_core.channel import Channel
-from lantz_core.features import Unicode, Float, Feature, Int
+from lantz_core.features.feature import Feature
+from lantz_core.features.mapping import Mapping
+from lantz_core.features import Unicode, Float
 from lantz_core.action import Action
 from lantz_core.errors import InvalidCommand, LantzError
-from lantz_core.backends.visa import VisaMessageBased, errors
+from lantz_core.backends.visa import VisaMessageDriver, errors
 from lantz_core.unit import UNIT_SUPPORT, get_unit_registry
 
 
@@ -26,6 +30,9 @@ def check_answer(res, msg):
 
     Parameters
     ----------
+    res : bool
+
+
     msg : unicode
         Answer to the command sent to the ANC300.
 
@@ -40,46 +47,52 @@ def check_answer(res, msg):
         raise InvalidCommand(err)
 
 
+UNIT_REMOVER = Parser('{} {_}')
+
+CAPA_EXTRACTER = Parser('capacitance = {}')
+
+VOLTAGE_EXTRACTER = Parser('voltage = {}')
+
+TRIGGER_MAP = {'off': 'off'}
+TRIGGER_MAP.update({i: '{}'.format(i) for i in range(1, 8)})
+
+
 class ANCModule(Channel):
     """Generic base class for ANC300 modules.
 
     """
     #: Serial number of the module.
-    serial_number = Unicode('getser {ch_id}')
+    serial_number = Unicode('getser {id}')
 
     #: Current operating mode of the module.
-    mode = Unicode('getm {ch_id}', 'setm {ch_id} {}')
+    mode = Unicode('getm {id}', 'setm {id} {}', extract='mode = {}')
 
     #: Current value of the saved capacitance. Can be None if the value was
     # never measured.
-    saved_capacitance = Feature('getc {ch_id}')
+    saved_capacitance = Feature('getc {id}')
 
     @Action()
     def stop_motion(self):
         """Stop any motion.
 
         """
-        res, msg = self.parent.anc_query('stop {}'.format(self.ch_id))
+        res, msg = self.parent.anc_query('stop {}'.format(self.id))
         check_answer(res, msg)
 
-    @Action(units=('V', (None)))
+    @Action()
     def read_output_voltage(self):
         """Read the voltage currently applied on the module.
 
         """
-        res, msg = self.parent.anc_query('geto {}'.format((self.ch_id)))
+        res, msg = self.parent.anc_query('geto {}'.format((self.id)))
         check_answer(res, msg)
-        return float(msg.split('\r\n')[0])
 
-    @Action(units=('muF', (None)))
-    def read_saved_capacitance(self):
-        """Read the saved capacitance load for this module.
-
-        """
-        res, msg = self.parent.anc_query('getc {}'.format((self.ch_id)))
-        check_answer(res, msg)
-        val = msg.split('\r\n')[0]
-        return float(msg.split('\r\n')[0]) if val != '?' else None
+        val = VOLTAGE_EXTRACTER(msg.split('\r\n')[0])
+        if UNIT_SUPPORT:
+            ureg = get_unit_registry()
+            return ureg.parse_expression(val)
+        else:
+            float(UNIT_REMOVER(val))
 
     @Action()
     def measure_capacitance(self, block=False, timeout=10):
@@ -101,9 +114,9 @@ class ANCModule(Channel):
             that the measure is over.
 
         """
-        with self.lock():
+        with self.lock:
             self.clear_cache(features=('saved_capacitance', 'mode'))
-            self.parent.anc_query('setm {} cap'.format(self.ch_id))
+            self.parent.anc_query('setm {} cap'.format(self.id))
             if block:
                 self.wait_for_capacitance_measure(timeout)
                 return self.read_saved_capacitance()
@@ -113,8 +126,8 @@ class ANCModule(Channel):
         """Wait for the capacitance measurement to finish.
 
         """
-        with self.lock():
-            self.parent.write('capw {}'.format(self.ch_id))
+        with self.lock:
+            self.parent.write('capw {}'.format(self.id))
             self._wait_for(timeout)
 
     def _wait_for(self, timeout):
@@ -125,8 +138,8 @@ class ANCModule(Channel):
         while t < timeout:
             try:
                 tic = default_timer()
-                msg = self.parent.read()
-                check_answer(msg)
+                err, msg = self.parent.anc_read()
+                check_answer(err, msg)
             except errors.VisaIOError as e:
                 if e.error_code != errors.VI_ERROR_TMO:
                     raise
@@ -137,13 +150,15 @@ class ANCModule(Channel):
         """Transform the value returned by the instrument.
 
         """
-        if value == '?':
+        if '?' in value:
             return None
 
-        val = float(value)
+        val = CAPA_EXTRACTER(value)
         if UNIT_SUPPORT:
-            val *= get_unit_registry().parse_unit('muF')
-        return val
+            ureg = get_unit_registry()
+            return ureg.parse_expression(val).to('nF')
+        else:
+            return UNIT_REMOVER(val)
 
 
 class ANCStepper(ANCModule):
@@ -151,22 +166,26 @@ class ANCStepper(ANCModule):
 
     """
     #: Stepping frequency.
-    frequency = Float('getf {ch_id}', 'setf {ch_id} {}', unit='Hz',
-                      limits='frequency')
+    frequency = Float('getf {id}', 'setf {id} {}', unit='Hz',
+                      limits='frequency', extract='frequency = {} H')
 
     #: Stepping amplitude.
-    amplitude = Float('getv {ch_id}', 'setv {ch_id} {}', unit='V',
-                      limits=(0, 150, 1e-3), discard={'limits': ['frequency']})
+    amplitude = Float('getv {id}', 'setv {id} {}', unit='V',
+                      limits=(0.0, 150.0, 1e-3),
+                      discard={'limits': ['frequency']},
+                      extract='voltage = {} V')
 
     #: Trigger triggering an up step
-    up_trigger = Int('gettu {ch_id}', 'settu {ch_id} {}', values=range(1, 8))
+    up_trigger = Mapping('gettu {id}', 'settu {id} {}', mapping=TRIGGER_MAP,
+                         extract='trigger = {}')
 
     #: Trigger triggering a down step
-    down_trigger = Int('gettd {ch_id}', 'settd {ch_id} {}', values=range(1, 8))
+    down_trigger = Mapping('gettd {id}', 'settd {id} {}', mapping=TRIGGER_MAP,
+                           extract='trigger = {}')
 
     mode = set_feat(mapping={'Ground': 'gnd', 'Step': 'stp'})
 
-    @Action(checks='self.mode == "Step";direction in ("Up", "Down"')
+    @Action(checks='self.mode == "Step";direction in ("Up", "Down")')
     def step(self, direction, steps):
         """Execute steps in the positive direction.
 
@@ -183,7 +202,7 @@ class ANCStepper(ANCModule):
         steps = 'c' if steps < 1 else steps
         cmd = 'stepu' if direction == 'Up' else 'stepd'
         cmd += ' {} {}'
-        res, msg = self.parent.anc_query(cmd.format(self.ch_id, steps))
+        res, msg = self.parent.anc_query(cmd.format(self.id, steps))
         check_answer(res, msg)
 
     @Action()
@@ -191,8 +210,8 @@ class ANCStepper(ANCModule):
         """Wait for the current stepping operation to end.
 
         """
-        with self.lock():
-            self.parent.write('setpw {}'.format(self.ch_id))
+        with self.lock:
+            self.parent.write('setpw {}'.format(self.id))
             self._wait_for(timeout)
 
     # XXXX
@@ -213,7 +232,7 @@ class ANCScanner(ANCModule):
 
 
 # TODO add ANM200 and ANM300 modules.
-class ANC300(VisaMessageBased):
+class ANC300(VisaMessageDriver):
     """Driver for the ANC300 piezo controller.
 
     Notes
@@ -224,11 +243,11 @@ class ANC300(VisaMessageBased):
     """
     PROTOCOLES = {'TCPIP': '7230::SOCKET'}
 
-    DEFAULTS = {'COMMONS': {'write_termination': '\r\n',
-                            'read_termination': '\r\n'}}
+    DEFAULTS = {'COMMON': {'write_termination': '\r\n',
+                           'read_termination': '\r\n'}}
 
     #: Drivers of the ANM150 modules.
-    anm150 = channel('_available_anm150', ANCStepper, cache=True)
+    anm150 = channel('_list_anm150', ANCStepper)
 
     def __init__(self, connection_infos, caching_allowed=True):
         """Extract the password from the connection info.
@@ -251,10 +270,10 @@ class ANC300(VisaMessageBased):
             pass
 
         self.read()  # Get stupid infos.
+        self.read()  # Empty line
         self.read()  # Get authentification request with given password.
         msg = self.read()  # Get authentification status
-
-        if msg != 'Authentification success':
+        if msg != 'Authorization success':
             raise LantzError('Failed to authentify :' + msg)
 
         res, msg = self.anc_query('echo off')  # Desactivate command echo
@@ -272,13 +291,44 @@ class ANC300(VisaMessageBased):
 
         return True
 
+    def default_get_feature(self, iprop, cmd, *args, **kwargs):
+        """Query the value using the provided command.
+
+        The command is formatted using the provided args and kwargs before
+        being passed on to the instrument.
+
+        """
+        err, msg = self.anc_query(cmd.format(*args, **kwargs))
+        check_answer(err, msg)
+        return msg
+
+    def default_set_feature(self, iprop, cmd, *args, **kwargs):
+        """Set the iproperty value of the instrument.
+
+        The command is formatted using the provided args and kwargs before
+        being passed on to the instrument.
+
+        """
+        err, msg = self.anc_query(cmd.format(*args, **kwargs))
+        check_answer(err, msg)
+        return msg
+
     def anc_query(self, msg):
         """Special query taking into account that answer can be multiple lines
         and are termintaed either with OK or ERROR.
 
+
         """
         with self.lock:
             self.write(msg)
+            return self.anc_read()
+
+    def anc_read(self):
+        """Special read taking into account that answer can be multiple lines
+        and are terminated either with OK or ERROR.
+
+        """
+        with self.lock:
             answer = ''
             while True:
                 ans = self.read()
@@ -298,7 +348,7 @@ class ANC300(VisaMessageBased):
 
         """
         anm150 = []
-        for i in self._modules:
+        for i in self._list_modules():
             res, msg = self.anc_query('getser {}'.format(i))
             if msg.startswith('ANM150'):
                 anm150.append(i)
