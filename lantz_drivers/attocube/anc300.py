@@ -43,7 +43,7 @@ def check_answer(res, msg):
 
     """
     if not res:
-        err = ' '.join(msg.split('\r\n')[:-1])
+        err = ' '.join(msg.split('\r\n')[::-1])
         raise InvalidCommand(err)
 
 
@@ -167,7 +167,7 @@ class ANCStepper(ANCModule):
     """
     #: Stepping frequency.
     frequency = Float('getf {id}', 'setf {id} {}', unit='Hz',
-                      limits='frequency', extract='frequency = {} H')
+                      limits=(0, 10000, 1), extract='frequency = {} Hz')
 
     #: Stepping amplitude.
     amplitude = Float('getv {id}', 'setv {id} {}', unit='V',
@@ -186,7 +186,7 @@ class ANCStepper(ANCModule):
     mode = set_feat(mapping={'Ground': 'gnd', 'Step': 'stp'})
 
     @Action(checks='self.mode == "Step";direction in ("Up", "Down")')
-    def step(self, direction, steps):
+    def step(self, direction, steps=1):
         """Execute steps in the positive direction.
 
         Parameters
@@ -203,25 +203,20 @@ class ANCStepper(ANCModule):
         cmd = 'stepu' if direction == 'Up' else 'stepd'
         cmd += ' {} {}'
         res, msg = self.parent.anc_query(cmd.format(self.id, steps))
+        msg += ('\r\n You may be above the power limit: check the '
+                'amplitude and frequency settings.')
         check_answer(res, msg)
 
     @Action()
     def wait_for_stepping_end(self, timeout=10):
         """Wait for the current stepping operation to end.
 
+        For unknow reasons this takes far more time than it should.
+
         """
         with self.lock:
-            self.parent.write('setpw {}'.format(self.id))
+            self.parent.write('stepw {}'.format(self.id))
             self._wait_for(timeout)
-
-    # XXXX
-    def _limits_frequency(self):
-        """Compute the limit frequency from the current voltage and measured
-        capacitance.
-
-        """
-        pass
-
 
 # TODO implement
 class ANCScanner(ANCModule):
@@ -310,8 +305,13 @@ class ANC300(VisaMessageDriver):
 
         """
         err, msg = self.anc_query(cmd.format(*args, **kwargs))
-        check_answer(err, msg)
-        return msg
+        return (err, msg)
+
+    def default_check_operation(self, feat, value, i_value, state=None):
+        """Same implementation as in HasFeature.
+
+        """
+        return state
 
     def anc_query(self, msg):
         """Special query taking into account that answer can be multiple lines
@@ -331,7 +331,9 @@ class ANC300(VisaMessageDriver):
         with self.lock:
             answer = ''
             while True:
-                ans = self.read()
+                # XXXX some commands terminate with \n only to avoid warnings
+                # we use strip
+                ans = self.read_raw().rstrip()
                 if ans in ('OK', 'ERROR'):
                     break
                 else:
