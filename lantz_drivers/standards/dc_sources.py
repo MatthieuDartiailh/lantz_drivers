@@ -10,7 +10,7 @@
 """
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
-from lantz_core.has_features import HasFeatures, set_feat
+from lantz_core.has_features import HasFeatures, channel, set_feat
 from lantz_core.features import Bool, Float, Unicode
 
 
@@ -19,15 +19,20 @@ class DCVoltageSource(HasFeatures):
 
     """
 
-    #: Status of the output.
-    output = Bool(aliases={True: ['On', 'ON', 'On'],
-                           False: ['Off', 'OFF', 'off']})
+    # Output channels (present even for single output instruments).
+    output = channel((1,))
 
-    #: Voltage applied on the ouput if on.
-    voltage = Float(unit='V')
+    with output as o:
 
-    #: Selected range for the voltage.
-    voltage_range = Float(unit='V')
+        #: Status of the output.
+        o.enabled = Bool(aliases={True: ['On', 'ON', 'On'],
+                                  False: ['Off', 'OFF', 'off']})
+
+        #: Voltage applied on the ouput if on.
+        o.voltage = Float(unit='V')
+
+        #: Selected range for the voltage.
+        o.voltage_range = Float(unit='V')
 
 
 class DCCurrentSource(HasFeatures):
@@ -35,15 +40,20 @@ class DCCurrentSource(HasFeatures):
 
     """
 
-    #: Status of the output.
-    output = Bool(aliases={True: ['On', 'ON', 'On'],
-                           False: ['Off', 'OFF', 'off']})
+    # Output channels (present even for single output instruments).
+    output = channel((1,))
 
-    #: Current flowing if the ouput is on.
-    current = Float(unit='A')
+    with output as o:
 
-    #: Slected range for the current.
-    current_range = Float(unit='A')
+        #: Status of the output.
+        o.enabled = Bool(aliases={True: ['On', 'ON', 'On'],
+                                  False: ['Off', 'OFF', 'off']})
+
+        #: Current flowing if the ouput is on.
+        o.current = Float(unit='A')
+
+        #: Slected range for the current.
+        o.current_range = Float(unit='A')
 
 
 class DCPowerSource(DCVoltageSource, DCCurrentSource):
@@ -52,19 +62,24 @@ class DCPowerSource(DCVoltageSource, DCCurrentSource):
 
     """
 
-    #: Selected mode of operation.
-    function = Unicode(mapping={'Voltage': '', 'Current': ''})
+    # Output channels (present even for single output instruments).
+    output = channel((1,))
 
-    #: Maximal voltage to apply in 'Current' mode.
-    voltage_limit = Float(checks="{function}=='Current'", unit='V')
+    with output as o:
 
-    #: Maximal current to deliver in 'Voltage' mode.
-    current_limit = Float(checks="{function}=='Voltage'", unit='A')
+        #: Selected mode of operation.
+        o.function = Unicode(mapping={'Voltage': '', 'Current': ''})
 
-    voltage = set_feat(checks="{function}=='Voltage'")
+        #: Maximal voltage to apply in 'Current' mode.
+        o.voltage_limit = Float(checks="{function}=='Current'", unit='V')
 
-    voltage_range = set_feat(checks="{function}=='Voltage'")
+        #: Maximal current to deliver in 'Voltage' mode.
+        o.current_limit = Float(checks="{function}=='Voltage'", unit='A')
 
-    current = set_feat(checks="{function}=='Current'")
+        o.voltage = set_feat(checks="{function}=='Voltage'")
 
-    current_range = set_feat(checks="{function}=='Current'")
+        o.voltage_range = set_feat(checks="{function}=='Voltage'")
+
+        o.current = set_feat(checks="{function}=='Current'")
+
+        o.current_range = set_feat(checks="{function}=='Current'")
