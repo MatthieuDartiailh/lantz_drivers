@@ -1,24 +1,19 @@
 #!/usr/bin/env python
 
-from __future__ import with_statement
-
-# http://docs.python.org/distutils/
-# http://packages.python.org/distribute/
-try:
-    from setuptools import setup
-except:
-    from distutils.core import setup
+from setuptools import setup, find_packages
 
 import os.path
 
-version_py = os.path.join(os.path.dirname(__file__), 'lantz_drivers', 'version.py')
+version_py = os.path.join(os.path.dirname(__file__), 'lantz', 'drivers',
+                          'version.py')
 with open(version_py, 'r') as f:
     d = dict()
     exec(f.read(), d)
     version = d['__version__']
 
+
 setup(
-    name = 'lantz_drivers',
+    name = 'lantz.drivers',
     description = 'Instrumentation framework',
     version = version,
     long_description = '''Lantz is an automation and instrumentation toolkit
@@ -47,7 +42,7 @@ language to wrap existing drivers and DLLs.''',
         'Programming Language :: Python :: 2',
         'Programming Language :: Python :: 3'
         ],
-    packages = ['lantz_drivers'],
-    requires = ['lantz_core'],
+    packages = find_packages(exclude=['tests', 'tests.*']),
+    install_requires = ['lantz.core'],
 )
 
