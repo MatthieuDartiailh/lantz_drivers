@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-    lantz_drivers.yokogawa.model_7651
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    lantz_drivers.yokogawa.model_gs200
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     Driver for the Yokogawa GS200 DC power source.
 
@@ -11,13 +11,16 @@
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
-from lantz_core.has_features import set_feat, channel
+from lantz_core import set_feat, channel, subsystem, conditional, constant
 from lantz_core.limits import FloatLimitsValidator
+from lantz_core.features import Unicode, LinkedTo
+from lantz_core.unit import to_float
 
-from ..standards.ieee488 import (InternalOperations, StatusReporting,
-                                 OperationComplete, OptionsIdentification,
-                                 StoredSettings)
-from ..standards.scpi.dc_sources import SCPIDCPowerSource
+from ..base.dc_sources import (DCPowerSource,
+                               DCSourceProtectionSubsystem)
+from ..common.ieee488 import (IEEEInternalOperations, IEEEStatusReporting,
+                              IEEEOperationComplete, IEEEOptionsIdentification,
+                              IEEEStoredSettings)
 
 VOLTAGE_RESOLUTION = {10e-3: 1e-7,
                       100e-3: 1e-6,
@@ -31,9 +34,9 @@ CURRENT_RESOLUTION = {1e-3: 1e-8,
                       200e-3: 1e-6}
 
 
-class YokogawaGS200(SCPIDCPowerSource, InternalOperations, StatusReporting,
-                    OperationComplete, OptionsIdentification,
-                    StoredSettings):
+class YokogawaGS200(DCPowerSource, IEEEInternalOperations,
+                    IEEEStatusReporting, IEEEOperationComplete,
+                    IEEEOptionsIdentification, IEEEStoredSettings):
     """Driver for the Yokogawa GS200 DC power source.
 
     """
@@ -57,22 +60,90 @@ class YokogawaGS200(SCPIDCPowerSource, InternalOperations, StatusReporting,
     output = channel()
 
     with output as o:
-        o.voltage = set_feat(limits='voltage')
+        o.mode = Unicode()  # XXXX
 
-        o.voltage_range = set_feat(values=(10e-3, 100e-3, 1.0, 10.0, 30.0),
+        o.voltage = set_feat(getter=True,
+                             setter='',
+                             checks=(None, ''),
+                             limits='voltage')
+
+        o.voltage_range = set_feat(getter=True,
+                                   setter='',
+                                   checks=(None, ''),
+                                   values=(10e-3, 100e-3, 1.0, 10.0, 30.0),
                                    discard={'limits': 'voltage'})
 
-        o.current_limit = set_feat(limits=(1e-3, 200e-3, 1e-3),
-                                   checks='{voltage_range} not in\
-                                           (10e-3, 100e-3 or\
-                                           {value} == 200e-3')
+        o.voltage_limit_behavior = set_feat(getter=conditional(
+            '"trip" if self.mode=="current" else "irrelevant"'))
 
-        o.current = set_feat(limits='current')
+        o.current = set_feat(getter=True,
+                             setter='',
+                             checks=(None, ''),
+                             limits='voltage')
 
-        o.current_range = set_feat(values=(1e-3, 10e-3, 100e-3, 200e-3),
+        o.current_range = set_feat(getter=True,
+                                   setter='',
+                                   checks=(None, ''),
+                                   values=(1e-3, 10e-3, 100e-3, 200e-3),
                                    discard={'limits': 'current'})
 
-        o.voltage_limit = set_feat(limits=(1.0, 30.0, 1))
+        o.voltage_limit_behavior = set_feat(getter=conditional(
+            '"irrelevant" if self.mode=="current" else "trip"'))
+
+        o.ovp = subsystem(DCSourceProtectionSubsystem)
+        with o.ovp as ovp:
+
+            ovp.enabled = set_feat(getter=constant(True),
+                                   checks='self.mode == "current"')
+
+            ovp.high_level = set_feat(getter='', setter='',
+                                      checks='self.mode == "current"',
+                                      limits=())
+
+            ovp.low_level = LinkedTo('value = -self.high_level',
+                                     'self.high_level = value')
+
+            @ovp
+            def read_status(self):
+                """
+                """
+                pass
+
+            @ovp
+            def reset(self):
+                """
+                """
+                pass
+
+        o.ocp = subsystem(DCSourceProtectionSubsystem)
+        with o.ocp as ocp:
+
+            ocp.enabled = set_feat(getter=constant(True),
+                                   checks='self.mode == "voltage"')
+
+            ocp.high_level = set_feat(getter='', setter='',
+                                      checks='self.mode == "voltage"',
+                                      limits=())
+
+            ocp.low_level = LinkedTo('high_level',
+                                     relation=('value = self.high_level',
+                                               'self.high_level = -value'))
+
+            @ocp
+            def read_status(self):
+                """
+                """
+                pass
+
+            @ocp
+            def reset(self):
+                """
+                """
+                pass
+
+        # =====================================================================
+        # --- Private API -----------------------------------------------------
+        # =====================================================================
 
         @o
         def _limits_voltage(self):
@@ -80,7 +151,7 @@ class YokogawaGS200(SCPIDCPowerSource, InternalOperations, StatusReporting,
             range.
 
             """
-            ran = float(self.voltage_range)  # Casting handling Quantity
+            ran = to_float(self.voltage_range)
             res = VOLTAGE_RESOLUTION[ran]
             if ran != 30.0:
                 ran *= 1.2

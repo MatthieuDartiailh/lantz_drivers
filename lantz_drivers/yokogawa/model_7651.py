@@ -95,6 +95,10 @@ class Yokogawa7651(VisaMessageDriver, DCPowerSource):
                                    extract='LV{}LA{_}',
                                    limits=(1.0, 30.0, 1))
 
+        # =====================================================================
+        # --- Private API -----------------------------------------------------
+        # =====================================================================
+
         @o
         def default_check_operation(self, feat, value, i_value, state=None):
             """Check that the operation did not result in any error.

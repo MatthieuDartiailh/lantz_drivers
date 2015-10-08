@@ -18,7 +18,7 @@ from lantz_core.backends.visa import VisaMessageDriver
 
 from .cards.be2100 import BE2100, detect_be2100
 
-
+# Add identity support
 class BN100(VisaMessageDriver):
     """Driver for the Bilt BN100 chassis.
 
@@ -42,6 +42,9 @@ class BN100(VisaMessageDriver):
     @Action
     def read_error(self):
         """Read the first error in the error queue.
+
+        If an unhandle error occurs, the error queue should be polled till it
+        is empty.
 
         """
         code, msg = self.query('SYST:ERR?').split(',')

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-    lantz_drivers.standards.ieee488
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    lantz_drivers.common.ieee488
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     This module implements base classes for instruments supporting standards
     command such *IDN?.
@@ -134,17 +134,20 @@
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
+from strinparser import Parser
+from lantz_core import Action, subsystem
 from lantz_core.features import Bool, Register, Unicode
-from lantz_core.action import Action
 from lantz_core.utils import byte_to_dict
 from lantz_core.backends.visa import VisaMessageDriver
+
+from ..base import Identity
 
 
 # =============================================================================
 # --- Status reporting --------------------------------------------------------
 # =============================================================================
 
-class StatusReporting(VisaMessageDriver):
+class IEEEStatusReporting(VisaMessageDriver):
     """Class implementing the status reporting commands.
 
     * `*CLS` - See IEC 60488-2:2004(E) section 10.3
@@ -187,12 +190,34 @@ class StatusReporting(VisaMessageDriver):
 # --- Internal operations -----------------------------------------------------
 # =============================================================================
 
-class Identify(VisaMessageDriver):
+class IEEEIdentify(VisaMessageDriver):
     """Class implementing the identification command.
 
+    The identity susbsytem feature values are extracted by default from the
+    answer to the *IDN? command. Its format can be specified by overriding
+    the idn_format of the subsystem.
+
     """
-    #: Id of the instrument.
-    idn = Unicode('*IDN?')
+    identity = subsystem(Identity)
+
+    with identity as i:
+
+        i.idn_format = ''
+
+        @i
+        def _getter(self, feat):
+            """Get the identity infos from the *IDN?.
+
+            """
+            idn = self.query('*IDN?')
+            infos = Parser(self.idn_format)(idn)
+            self._cache.update(infos)
+            return infos.get(feat.name, '')
+
+        i._get_manufacturer = _getter
+        i._get_model = _getter
+        i._get_serial = _getter
+        i._get_firmware = _getter
 
     @property
     def connected(self):
@@ -204,7 +229,7 @@ class Identify(VisaMessageDriver):
         return True
 
 
-class SelfTest(VisaMessageDriver):
+class IEEESelfTest(VisaMessageDriver):
     """Class implementing the self-test command.
 
     """
@@ -219,7 +244,7 @@ class SelfTest(VisaMessageDriver):
         return self.SELF_TEST.get(int(self.query('*TST?')), 'Unknown error')
 
 
-class Reset(VisaMessageDriver):
+class IEEEReset(VisaMessageDriver):
     """Class implemnting the reset command.
 
     """
@@ -234,7 +259,7 @@ class Reset(VisaMessageDriver):
         self.write('*RST')
 
 
-class InternalOperations(Reset, SelfTest, Identify):
+class IEEEInternalOperations(IEEEReset, IEEESelfTest, IEEEIdentify):
     """Class implementing all the internal operations.
 
     """
@@ -245,7 +270,7 @@ class InternalOperations(Reset, SelfTest, Identify):
 # --- Synchronisation ---------------------------------------------------------
 # =============================================================================
 
-class OperationComplete(VisaMessageDriver):
+class IEEEOperationComplete(VisaMessageDriver):
     """A mixin class implementing the operation complete commands.
 
     * `*OPC` - See IEC 60488-2:2004(E) section 10.18
@@ -269,7 +294,7 @@ class OperationComplete(VisaMessageDriver):
         return bool(int(self.query('*OPC?')))
 
 
-class WaitToContinue(VisaMessageDriver):
+class IEEEWaitToContinue(VisaMessageDriver):
     """A mixin class implementing the wait command.
 
     * `*WAI` - See IEC 60488-2:2004(E) section 10.39
@@ -289,7 +314,7 @@ class WaitToContinue(VisaMessageDriver):
         self.write('*WAI')
 
 
-class Synchronisation(WaitToContinue, OperationComplete):
+class IEEESynchronisation(IEEEWaitToContinue, IEEEOperationComplete):
     """A mixin class implementing all synchronisation methods.
 
     """
@@ -300,7 +325,7 @@ class Synchronisation(WaitToContinue, OperationComplete):
 # --- Power on ----------------------------------------------------------------
 # =============================================================================
 
-class PowerOn(VisaMessageDriver):
+class IEEEPowerOn(VisaMessageDriver):
     """A mixin class, implementing the optional power-on common commands.
 
     The IEC 60488-2:2004(E) defines the following optional power-on common
@@ -322,7 +347,7 @@ class PowerOn(VisaMessageDriver):
 # --- Resource description ----------------------------------------------------
 # =============================================================================
 
-class ResourceDescription(VisaMessageDriver):
+class IEEEResourceDescription(VisaMessageDriver):
     """A class implementing the resource description common commands.
 
     * `*RDT` - See IEC 60488-2:2004(E) section 10.30
@@ -337,7 +362,7 @@ class ResourceDescription(VisaMessageDriver):
 # --- Protected user data -----------------------------------------------------
 # =============================================================================
 
-class ProtectedUserData(VisaMessageDriver):
+class IEEEProtectedUserData(VisaMessageDriver):
     """A class implementing the protected user data common commands.
 
     * `*RDT` - See IEC 60488-2:2004(E) section 10.30
@@ -352,7 +377,7 @@ class ProtectedUserData(VisaMessageDriver):
 # --- Calibration -------------------------------------------------------------
 # =============================================================================
 
-class Calibration(object):
+class IEEECalibration(object):
     """A class implementing the optional calibration command.
 
     * `*CAL?` - See IEC 60488-2:2004(E) section 10.2
@@ -371,7 +396,7 @@ class Calibration(object):
 # --- Triggering --------------------------------------------------------------
 # =============================================================================
 
-class Trigger(VisaMessageDriver):
+class IEEETrigger(VisaMessageDriver):
     """A class implementing the optional trigger command.
 
     * `*TRG` - See IEC 60488-2:2004(E) section 10.37
@@ -379,9 +404,6 @@ class Trigger(VisaMessageDriver):
     It is mandatory for devices implementing the DT1 subset.
 
     """
-    def __init__(self, *args, **kw):
-        super(Trigger, self).__init__(*args, **kw)
-
     def trigger(self):
         """Creates a trigger event.
 
@@ -393,7 +415,7 @@ class Trigger(VisaMessageDriver):
 # --- Macro trigger -----------------------------------------------------------
 # =============================================================================
 
-class TriggerMacro(Trigger):
+class IEEETriggerMacro(IEEETrigger):
     """A class implementing the optional trigger macro commands.
 
     * `*DDT` - See IEC 60488-2:2004(E) section 10.4
@@ -408,7 +430,7 @@ class TriggerMacro(Trigger):
 # --- Option identification ---------------------------------------------------
 # =============================================================================
 
-class OptionsIdentification(VisaMessageDriver):
+class IEEEOptionsIdentification(VisaMessageDriver):
     """A class implementing the option identification command.
 
     * `*OPT?` - See IEC 60488-2:2004(E) section 10.20
@@ -421,7 +443,7 @@ class OptionsIdentification(VisaMessageDriver):
 # --- Stored settings ---------------------------------------------------------
 # =============================================================================
 
-class StoredSettings(VisaMessageDriver):
+class IEEEStoredSettings(VisaMessageDriver):
     """A class implementing the stored setting commands.
 
     * `*RCL` - See IEC 60488-2:2004(E) section 10.29
@@ -439,6 +461,7 @@ class StoredSettings(VisaMessageDriver):
 
         """
         self.write('*RCL {}'.format(idx))
+        self.clear_cache()
 
     @Action()
     def save(self, idx):
