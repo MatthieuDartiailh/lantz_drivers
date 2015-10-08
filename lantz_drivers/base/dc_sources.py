@@ -59,7 +59,9 @@ class DCPowerSourceWithMeasure(Subsystem):
 
         @o
         @Action()
-        def measure(self, opt, **kwargs):
+        def measure(self, kind, **kwargs):
+            """
+            """
             pass
 
 
@@ -88,6 +90,9 @@ class DCSourceProtectionSubsystem(Subsystem):
     #:
     enabled = Bool(aliases={True: ['On', 'ON', 'On'],
                             False: ['Off', 'OFF', 'off']})
+
+    #:
+    behavior = Unicode()
 
     #:
     low_level = Float()

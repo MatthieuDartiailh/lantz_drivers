@@ -39,7 +39,7 @@ class BE2100(BN100Card, DCPowerSourceWithMeasure):
 
         o.voltage_range = set_feat(getter='VOLT:RANG?', setter='VOLT:RANG {}',
                                    values=(1.2, 12), extract='{},{_}',
-                                   checks=(None, 'not {output}'),
+                                   checks=(None, 'not driver.output'),
                                    discard={'limits': 'voltage'})
 
         o.voltage_limit_behavior = set_feat(getter=constant('irrelevant'))
@@ -54,16 +54,17 @@ class BE2100(BN100Card, DCPowerSourceWithMeasure):
         with o.voltage_saturation as vs:
             #: Lowest allowed voltage.
             vs.low = Float('VOLT:SAT:NEG?', 'VOLT:SAT:NEG {}', unit='V',
-                           limits=(-12, 0), discard={'limits': 'voltage'})
+                           limits=(-12, 0), discard={'limits': ('voltage',)})
 
             #: Highest allowed voltage.
             vs.high = Float('VOLT:SAT:POS?', 'VOLT:SAT:POS {}', unit='V',
-                            limits=(-12, 0), discard={'limits': 'voltage'})
+                            limits=(-12, 0), discard={'limits': ('voltage',)})
 
         o.current = set_feat(getter=constant(0.2))
 
         o.current_range = set_feat(getter=constant(0.2))
 
+        # XXXX check with David
         o.current_limit_behavior = set_feat(getter=constant('regulate'))
 
         #: Subsystem handling triggering and reaction to triggering.
@@ -110,18 +111,24 @@ class BE2100(BN100Card, DCPowerSourceWithMeasure):
         @o
         @Action()
         def read_voltage_status(self):
-            """Status of the current voltage update.
+            """Progression of the current voltage update.
+
+            Returns
+            -------
+            progression : int
+                Progression of the voltage update. The value is between 0
+                and 1.
 
             """
-            return self.query('I {};VOLT:STAT?'.format(self.ch_id))
+            return int(self.query('I {};VOLT:STAT?'.format(self.ch_id)))
 
         # XXXX
         @o
         @Action(unit=())
-        def measure(self, opt, **kwargs):
+        def measure(self, kind, **kwargs):
             """
             """
-            if opt != 'voltage':
+            if kind != 'voltage':
                 raise ValueError('')
 
         # =====================================================================

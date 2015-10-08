@@ -12,11 +12,13 @@
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
-from lantz_core.has_features import set_feat, channel
+from lantz_core import (set_feat, channel, conditional, constant, subsystem,
+                        Action)
+from lantz_core.features import LinkedTo, Register
 from lantz_core.limits import FloatLimitsValidator
 from lantz_core.backends.visa import VisaMessageDriver
 
-from ..standards.dc_sources import DCPowerSource
+from ..base.dc_sources import DCPowerSource, DCSourceProtectionSubsystem
 
 
 VOLTAGE_RESOLUTION = {10e-3: 1e-7,
@@ -41,6 +43,12 @@ class Yokogawa7651(VisaMessageDriver, DCPowerSource):
 
     DEFAULTS = {'COMMON': {'read_termination': '\r\n'},
                 'ASRL': {'write_termination': '\r\n'}}
+
+    # XXXX
+    status_byte = Register()
+
+    # XXXX
+    status_code = Register()
 
     def initialize(self):
         """Set the data termination.
@@ -72,7 +80,11 @@ class Yokogawa7651(VisaMessageDriver, DCPowerSource):
                                    extract='F1R{}S{_}',
                                    mapping={10e-3: 2, 100e-3: 3, 1.0: 4,
                                             10.0: 5, 30.0: 6},
-                                   discard={'limits': 'voltage'})
+                                   discard={'feature': ('ocp.enabled',),
+                                            'limits': ('voltage',)})
+
+        o.voltage_limit_behavior = set_feat(getter=conditional(
+            '"trip" if self.mode=="current" else "irrelevant"'))
 
         o.current_limit = set_feat(getter=True,
                                    setter='LA{}E',
@@ -90,10 +102,96 @@ class Yokogawa7651(VisaMessageDriver, DCPowerSource):
                                    mapping={1e-3: 4, 10e-3: 5, 100e-3: 6},
                                    discard={'limits': ('current',)})
 
-        o.voltage_limit = set_feat(getter=True,
-                                   setter='LV{}E',
-                                   extract='LV{}LA{_}',
-                                   limits=(1.0, 30.0, 1))
+        o.voltage_limit_behavior = set_feat(getter=conditional(
+            '"irrelevant" if self.mode=="current" else "trip"'))
+
+        o.ovp = subsystem(DCSourceProtectionSubsystem)
+        with o.ovp as ovp:
+
+            ovp.enabled = set_feat(getter=constant(True),
+                                   checks='driver.mode == "current"')
+
+            ovp.behavior = set_feat(getter=constant('regulate'))
+
+            ovp.high_level = set_feat(getter=True,
+                                      setter='LV{}E',
+                                      extract='LV{}LA{_}',
+                                      checks='driver.mode == "current"',
+                                      limits=(1, 30, 1))
+
+            ovp.low_level = LinkedTo('high_level',
+                                     relation=('value = -driver.high_level',
+                                               'driver.high_level = value'),)
+
+            @ovp
+            @Action(checks='driver.mode == "current"')
+            def read_status(self):
+                """Check whether the overcurrent protection tripped the
+                output.
+
+                """
+                if self.parent.status_byte['Limit error']:
+                    if self.parent.status_code['Output']:
+                        return 'overload'
+                    return 'tripped'
+
+                return 'normal'
+
+            @ovp
+            @Action(checks='driver.mode == "current"')
+            def reset(self):
+                """Clear the over-voltage and switch the output back on.
+
+                """
+                self.clear_cache(('output',))
+                self.output = 'on'
+
+        o.ocp = subsystem(DCSourceProtectionSubsystem)
+        with o.ocp as ocp:
+            # XXXX disabled in mV range
+            ocp.enabled = set_feat(getter=True,
+                                   checks='driver.mode == "voltage"')
+
+            ocp.behavior = set_feat(getter=constant('regulate'))
+
+            ocp.high_level = set_feat(getter=True,
+                                      setter='LA{}E',
+                                      extract='LV{_}LA{}',
+                                      limits=(5e-3, 120e-3, 1e-3))
+
+            ocp.low_level = LinkedTo('high_level',
+                                     relation=('value = driver.high_level',
+                                               'driver.high_level = -value'))
+
+            @ocp
+            @Action(checks='driver.mode == "voltage"')
+            def read_status(self):
+                """Check whether the over-current protection tripped the
+                output.
+
+                """
+                if self.parent.status_byte['Limit error']:
+                    if self.parent.status_code['Output']:
+                        return 'overload'
+                    return 'tripped'
+
+                return 'normal'
+
+            @ocp
+            @Action(checks='driver.mode == "voltage"')
+            def reset(self):
+                """Clear the over-current and switch the output back on.
+
+                """
+                self.clear_cache(('output',))
+                self.output = 'on'
+
+            # XXXX
+            @ocp
+            def _get_enabled(self, feat):
+                """
+                """
+                pass
 
         # =====================================================================
         # --- Private API -----------------------------------------------------
@@ -144,7 +242,7 @@ class Yokogawa7651(VisaMessageDriver, DCPowerSource):
             """Read the output current status byte and extract the output state
 
             """
-            return bool(int(self.query('OC')[5::]) & 16)
+            return 'Output' in self.status_code
 
         @o
         def _get_range(self):
