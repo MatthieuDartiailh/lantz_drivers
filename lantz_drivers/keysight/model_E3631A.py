@@ -219,5 +219,3 @@ class KeysightE3631A(DCPowerSourceWithMeasure, IEEEInternalOperations,
         """
         code, msg = self.read_error()
         return bool(code), msg
-
-
