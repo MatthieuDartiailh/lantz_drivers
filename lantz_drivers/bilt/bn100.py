@@ -41,8 +41,8 @@ class BN100(VisaMessageDriver, IEEEReset):
         """
         super(BN100, self).initialize()
         self.write('SYST:VERB 0')
-
-    @Action
+# XXXX use generic SCPI class
+    @Action()
     def read_error(self):
         """Read the first error in the error queue.
 

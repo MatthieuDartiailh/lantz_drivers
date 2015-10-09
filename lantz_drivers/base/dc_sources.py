@@ -81,7 +81,7 @@ class DCSourceTriggerSubsystem(Subsystem):
     mode = Unicode(values=('disabled', 'enabled'))
 
     #:
-    source = Unicode()
+    source = Unicode(values=('immediate', 'bus'))  # Will extend later
 
     #:
     delay = Float(unit='s')

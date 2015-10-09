@@ -152,13 +152,11 @@ from ..base import Identity
 class IEEEStatusReporting(VisaMessageDriver):
     """Class implementing the status reporting commands.
 
-    * `*CLS` - See IEC 60488-2:2004(E) section 10.3
     * `*ESE` - See IEC 60488-2:2004(E) section 10.10
     * `*ESE?` - See IEC 60488-2:2004(E) section 10.11
     * `*ESR?` - See IEC 60488-2:2004(E) section 10.12
     * `*SRE` - See IEC 60488-2:2004(E) section 10.34
     * `*SRE?` - See IEC 60488-2:2004(E) section 10.35
-    * `*STB?` - See IEC 60488-2:2004(E) section 10.36
 
     """
     #: Meaning of the event register.
@@ -204,7 +202,7 @@ class IEEEIdentify(VisaMessageDriver):
 
     with identity as i:
 
-        i.idn_format = ''
+        i.IEEE_IDN_FORMAT = ''
 
         @i
         def _getter(self, feat):
@@ -236,14 +234,15 @@ class IEEESelfTest(VisaMessageDriver):
 
     """
     #: Meaning of the self test result.
-    SELF_TEST = {0: 'Normal completion'}
+    IEEE_SELF_TEST = {0: 'Normal completion'}
 
     @Action()
     def perform_self_test(self):
         """Run the self test routine.
 
         """
-        return self.SELF_TEST.get(int(self.query('*TST?')), 'Unknown error')
+        return self.IEEE_SELF_TEST.get(int(self.query('*TST?')),
+                                       'Unknown error')
 
 
 class IEEEReset(VisaMessageDriver):
@@ -261,6 +260,7 @@ class IEEEReset(VisaMessageDriver):
 
         """
         self.write('*RST')
+        self.clear_cache()
         sleep(self.IEEE_RESET_WAITE_RESET_WAIT)
 
 
