@@ -11,7 +11,7 @@
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 from lantz_core.has_features import (HasFeatures, channel, Subsystem, Action)
-from lantz_core.features import Bool, Float, Unicode
+from lantz_core.features import Bool, Float, Unicode, constant
 
 
 class DCPowerSource(HasFeatures):
@@ -20,9 +20,9 @@ class DCPowerSource(HasFeatures):
     """
 
     #:
-    output = channel((0,))
+    outputs = channel((0,))
 
-    with output as o:
+    with outputs as o:
 
         #:
         o.enabled = Bool(aliases={True: ['On', 'ON', 'On'],
@@ -35,7 +35,8 @@ class DCPowerSource(HasFeatures):
         o.voltage_range = Float(unit='V')
 
         #:
-        o.voltage_limit_behavior = Unicode(values=('irrelevant', 'trip',
+        o.voltage_limit_behavior = Unicode(constant('regulate'),
+                                           values=('irrelevant', 'trip',
                                                    'regulate'))
 
         #:
@@ -45,8 +46,16 @@ class DCPowerSource(HasFeatures):
         o.current_range = Float(unit='A')
 
         #:
-        o.current_limit_behavior = Unicode(values=('irrelevant', 'trip',
+        o.current_limit_behavior = Unicode(constant('regulate'),
+                                           values=('irrelevant', 'trip',
                                                    'regulate'))
+
+        @o
+        @Action()
+        def read_output_status(self):
+            """
+            """
+            pass
 
 
 class DCPowerSourceWithMeasure(Subsystem):
@@ -92,7 +101,7 @@ class DCSourceProtectionSubsystem(Subsystem):
                             False: ['Off', 'OFF', 'off']})
 
     #:
-    behavior = Unicode()
+    behavior = Unicode(constant('trip'))
 
     #:
     low_level = Float()

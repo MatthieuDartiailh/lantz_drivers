@@ -134,6 +134,8 @@
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
+from time import sleep
+
 from strinparser import Parser
 from lantz_core import Action, subsystem
 from lantz_core.features import Bool, Register, Unicode
@@ -248,6 +250,8 @@ class IEEEReset(VisaMessageDriver):
     """Class implemnting the reset command.
 
     """
+    IEEE_RESET_WAIT = 1
+
     @Action()
     def reset(self):
         """Initialize the instrument settings.
@@ -257,6 +261,7 @@ class IEEEReset(VisaMessageDriver):
 
         """
         self.write('*RST')
+        sleep(self.IEEE_RESET_WAITE_RESET_WAIT)
 
 
 class IEEEInternalOperations(IEEEReset, IEEESelfTest, IEEEIdentify):

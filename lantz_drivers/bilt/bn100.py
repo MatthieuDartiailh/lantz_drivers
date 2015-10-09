@@ -16,10 +16,11 @@ from lantz_core.has_features import channel
 from lantz_core.action import Action
 from lantz_core.backends.visa import VisaMessageDriver
 
+from ..common.ieee488 import IEEEReset
 from .cards.be2100 import BE2100, detect_be2100
 
-# Add identity support
-class BN100(VisaMessageDriver):
+
+class BN100(VisaMessageDriver, IEEEReset):
     """Driver for the Bilt BN100 chassis.
 
     """
@@ -31,6 +32,8 @@ class BN100(VisaMessageDriver):
                 }
 
     be2100 = channel('_list_be2100', BE2100)
+
+    IEEE_RESET_WAIT = 4
 
     def initialize(self):
         """Make sure the communication parameters are correctly sets.

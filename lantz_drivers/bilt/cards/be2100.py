@@ -25,6 +25,7 @@ from ...base.dc_sources import (DCPowerSourceWithMeasure,
 detect_be2100 = make_card_detector(['BE2101', 'BE2102', 'BE2103'])
 
 
+# Add identity parsing
 class BE2100(BN100Card, DCPowerSourceWithMeasure):
     """Driver for the Bilt BE2100 high precision dc voltage source.
 
@@ -40,7 +41,8 @@ class BE2100(BN100Card, DCPowerSourceWithMeasure):
         o.voltage_range = set_feat(getter='VOLT:RANG?', setter='VOLT:RANG {}',
                                    values=(1.2, 12), extract='{},{_}',
                                    checks=(None, 'not driver.output'),
-                                   discard={'limits': 'voltage'})
+                                   discard={'features': ('voltage',),
+                                            'limits': ('voltage',)})
 
         o.voltage_limit_behavior = set_feat(getter=constant('irrelevant'))
 
@@ -64,7 +66,6 @@ class BE2100(BN100Card, DCPowerSourceWithMeasure):
 
         o.current_range = set_feat(getter=constant(0.2))
 
-        # XXXX check with David
         o.current_limit_behavior = set_feat(getter=constant('regulate'))
 
         #: Subsystem handling triggering and reaction to triggering.
@@ -107,6 +108,14 @@ class BE2100(BN100Card, DCPowerSourceWithMeasure):
             tr.ready_amplitude = Float('TRIG:READY:AMPL?',
                                        'TRIG:READY:AMPL {}',
                                        unit='V', limits='voltage')
+
+# XXXX
+        @o
+        @Action()
+        def read_output_status(self):
+            """
+            """
+            pass
 
         @o
         @Action()

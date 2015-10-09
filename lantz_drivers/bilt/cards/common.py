@@ -12,7 +12,9 @@
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
-from lantz_core.channel import Channel
+from stringparser import Parser
+from lantz_core import Channel, subsystem
+from ...base.identity import Identity
 
 
 def make_card_detector(model_id):
@@ -44,6 +46,26 @@ class BN100Card(Channel):
     """Base driver for cards used with the Bilt BN100 chassis.
 
     """
+    identity = subsystem(Identity)
+
+    with identity as i:
+
+        i.idn_format = ''
+
+        @i
+        def _getter(self, feat):
+            """Get the identity infos from the *IDN?.
+
+            """
+            idn = self.query('*IDN?')
+            infos = Parser(self.idn_format)(idn)
+            self._cache.update(infos)
+            return infos.get(feat.name, '')
+
+        i._get_manufacturer = _getter
+        i._get_model = _getter
+        i._get_serial = _getter
+        i._get_firmware = _getter
 
     def default_get_feature(self, feat, cmd, *args, **kwargs):
         """Prepend module selection to command.
