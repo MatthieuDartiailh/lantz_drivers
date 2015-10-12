@@ -20,6 +20,7 @@ from ..base.dc_sources import DCPowerSource
 from ..common.ieee488 import (IEEEInternalOperations, IEEEStatusReporting,
                               IEEEOperationComplete, IEEEOptionsIdentification,
                               IEEEStoredSettings)
+from ..common.scpi.error_reading import SCPIErrorReading
 
 VOLTAGE_RESOLUTION = {10e-3: 1e-7,
                       100e-3: 1e-6,
@@ -35,26 +36,19 @@ CURRENT_RESOLUTION = {1e-3: 1e-8,
 
 class YokogawaGS200(DCPowerSource, IEEEInternalOperations,
                     IEEEStatusReporting, IEEEOperationComplete,
-                    IEEEOptionsIdentification, IEEEStoredSettings):
+                    IEEEOptionsIdentification, IEEEStoredSettings,
+                    SCPIErrorReading):
     """Driver for the Yokogawa GS200 DC power source.
 
     """
     PROTOCOLS = {'GPIB': 'INSTR', 'USB': 'INSTR', 'TCPIP': 'INSTR'}
 
-    DEFAULTS = {'COMMON': {'read_termination': '\n'}}
+    DEFAULTS = {'COMMON': {'read_termination': '\n',
+                           'write_termination': '\n'}}
 
     MANUFACTURER_ID = 0xB21
 
     MODEL_CODE = 0x39
-
-    def default_check_operation(self, feat, value, i_value, state=None):
-        """Check that the operation did not result in any error.
-
-        """
-        if self.status_byte[2]:
-            return False, self.read_errors()
-
-        return True, None
 
     output = channel()
 

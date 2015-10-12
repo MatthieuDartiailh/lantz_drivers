@@ -61,7 +61,7 @@ class Yokogawa7651(VisaMessageDriver, DCPowerSource):
 
         """
         super(Yokogawa7651, self).initialize()
-        self.write('DL0')
+        self.write('DL0')  # Choose the termination character
         self.write('MS31')  # Unmask the status byte by default.
 
     @Action()
