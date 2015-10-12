@@ -68,8 +68,24 @@ class DCPowerSourceWithMeasure(Subsystem):
 
         @o
         @Action()
-        def measure(self, kind, **kwargs):
-            """
+        def measure(self, quantity, **kwargs):
+            """Measure the output voltage/current.
+
+            Parameters
+            ----------
+            quantity : unicode, {'voltage', 'current'}
+                Quantity to measure.
+
+            **kwargs :
+                Optional kwargs to specify the conditions of the measure
+                (integration time, averages, etc) if applicable.
+
+            Returns
+            -------
+            value : float or pint.Quantity
+                Measured value. If units are supported the value is a Quantity
+                object.
+
             """
             pass
 

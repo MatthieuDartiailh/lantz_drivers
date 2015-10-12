@@ -12,6 +12,7 @@ from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
 from lantz_core import set_feat, channel, subsystem, Action
+from lantz_core.errors import LantzError
 from lantz_core.limits import FloatLimitsValidator
 from lantz_core.unit import to_float, UNIT_SUPPORT, get_unit_registry
 from lantz_core.features import Feature, Bool, Alias, conditional
@@ -67,21 +68,52 @@ class _KeysightE363XA(DCPowerSourceWithMeasure, IEEEInternalOperations,
 
         o.current_range = set_feat(getter='CURR:RANGE?',
                                    setter='CURR:RANGE {}')
-# XXXX
+
         @o
-        @Action()
-        def measure(self, kind, **kwargs):
+        @Action(checks={'quantity': 'value in ("voltage", "current")'})
+        def measure(self, quantity, **kwargs):
+            """Measure the output voltage/current.
+
+            Parameters
+            ----------
+            quantity : unicode, {'voltage', 'current'}
+                Quantity to measure.
+
+            **kwargs :
+                This instrument recognize no optional parameters.
+
+            Returns
+            -------
+            value : float or pint.Quantity
+                Measured value. If units are supported the value is a Quantity
+                object.
+
             """
-            """
-            pass
-# XXXX
+            cmd = 'MEAS:'
+            cmd += 'VOLT' if quantity != 'current' else 'CURR'
+            value = float(self.parent.query(cmd))
+            # XXXX create a utility function doing the conversion taking into
+            # the settings.
+            if UNIT_SUPPORT:
+                ureg = get_unit_registry()
+                value *= ureg.volt if quantity != 'current' else ureg.ampere
+
+            return value
+
         @o
         @Action(unit=(None, (None, 'V', 'A')),
                 limits={'voltage': 'voltage', 'current': 'current'})
         def apply(self, voltage, current):
+            """Set both the voltage and current limit.
+
             """
-            """
-            pass
+            with self.lock:
+                self.parent.write('APPLY {}, {}'.format(self.id, voltage,
+                                                        current))
+                res, msg = self.parent.read_error()
+            if res:
+                err = 'Failed to apply {}V, {}A to output {} :\n{}'
+                raise LantzError(err.format(voltage, current, self.id, msg))
 # XXXX
         @o
         @Action()
@@ -102,6 +134,22 @@ class _KeysightE363XA(DCPowerSourceWithMeasure, IEEEInternalOperations,
 
             t.delay = set_feat('TRIG:DEL?', 'TRIG:DEL {}',
                                limits=(1, 3600, 1))
+
+            @o
+            @Action()
+            def arm(self):
+                """Prepare the channel to receive a trigger.
+
+                If the trigger mode is immediate the update occurs as soon as
+                the command is processed.
+
+                """
+                with self.lock:
+                    self.write('INIT')
+                    res, msg = self.parent.parent.read_error()
+                if res:
+                    err = 'Failed to arm the trigger for output {}:\n{}'
+                    raise LantzError(err.format(self.id, msg))
 
             # Actually the caching do the rest for us.
             @t
@@ -160,6 +208,73 @@ class KeysightE3631A(_KeysightE363XA):
         o.voltage_range = set_feat(getter=True)
 
         o.current_range = set_feat(getter=True)
+
+# XXXX provide a nicer way to do that (and more robust in lantz_core)
+        @o
+        @Action()
+        def measure(self, quantity, **kwargs):
+            """Measure the output voltage/current.
+
+            Parameters
+            ----------
+            quantity : unicode, {'voltage', 'current'}
+                Quantity to measure.
+
+            **kwargs :
+                This instrument recognize no optional parameters.
+
+            Returns
+            -------
+            value : float or pint.Quantity
+                Measured value. If units are supported the value is a Quantity
+                object.
+
+            """
+            with self.lock:
+                self.parent.write('INSTR:SELECT %s' % self.id)
+                super(type(self), self).measure(quantity, **kwargs)
+
+        @o
+        @Action()
+        def apply(self, voltage, current):
+            """Set both the voltage and current limit.
+
+            """
+            with self.lock:
+                self.parent.write('INSTR:SELECT %s' % self.id)
+                super(type(self), self).apply(voltage, current)
+# XXXX
+        @o
+        @Action()
+        def read_output_status(self):
+            """Read the status of the output.
+
+            Returns
+            -------
+            status : unicode, {'disabled',
+                               'constant voltage', 'constant voltage',
+                               'tripped, voltage', 'tripped, current',
+                               'unregulated'}
+
+            """
+            pass
+
+        o.trigger = subsystem(DCSourceTriggerSubsystem)
+
+        with o.trigger as t:
+
+            @o
+            @Action()
+            def arm(self):
+                """Prepare the channel to receive a trigger.
+
+                If the trigger mode is immediate the update occurs as soon as
+                the command is processed.
+
+                """
+                with self.lock:
+                    self.write('INSTR:SELECT %s' % self.id)
+                    super(type(self), self).arm()
 
         @o
         def default_get_feature(self, feat, cmd, *args, **kwargs):
@@ -230,8 +345,9 @@ class KeysightE3631A(_KeysightE363XA):
                 return FloatLimitsValidator(0, 1.03, 1e-3, unit='A')
 
 
-class Keysight3633A(_KeysightE363XA):
-    """
+class KeysightE3633A(_KeysightE363XA):
+    """Driver for the Keysight E3633A DC power source.
+
     """
     output = channel()
 
@@ -262,8 +378,9 @@ class Keysight3633A(_KeysightE363XA):
                 return FloatLimitsValidator(0, 10.3, 1e-3, unit='A')
 
 
-class Keysight3634A(_KeysightE363XA):
-    """
+class KeysightE3634A(_KeysightE363XA):
+    """Driver for the Keysight E3634A DC power source.
+
     """
     output = channel()
 
