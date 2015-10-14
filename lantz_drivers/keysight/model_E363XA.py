@@ -14,7 +14,7 @@ from __future__ import (division, unicode_literals, print_function,
 from lantz_core import set_feat, channel, subsystem, Action
 from lantz_core.errors import LantzError
 from lantz_core.limits import FloatLimitsValidator
-from lantz_core.unit import to_float, UNIT_SUPPORT, get_unit_registry
+from lantz_core.unit import to_float, to_quantity
 from lantz_core.features import Feature, Bool, Alias, conditional
 from lantz_core.features.util import append
 
@@ -92,11 +92,7 @@ class _KeysightE363XA(DCPowerSourceWithMeasure, IEEEInternalOperations,
             cmd = 'MEAS:'
             cmd += 'VOLT' if quantity != 'current' else 'CURR'
             value = float(self.parent.query(cmd))
-            # XXXX create a utility function doing the conversion taking into
-            # the settings.
-            if UNIT_SUPPORT:
-                ureg = get_unit_registry()
-                value *= ureg.volt if quantity != 'current' else ureg.ampere
+            value = to_quantity(value, 'V' if quantity != 'current' else 'A')
 
             return value
 
@@ -199,7 +195,8 @@ class KeysightE3631A(_KeysightE363XA):
                                      '1 not in driver.coupled_triggers or '
                                      '2 not in driver.coupled_triggers')))
 
-    output = channel({'P6V': 1, 'P25V': 2, 'N25V': 3})
+    output = channel(('P6V', 'P25V', 'N25V'),
+                     aliases={0: 'P6V', 1: 'P25V', 2: 'N25V'})
 
     with output as o:
 
@@ -209,7 +206,6 @@ class KeysightE3631A(_KeysightE363XA):
 
         o.current_range = set_feat(getter=True)
 
-# XXXX provide a nicer way to do that (and more robust in lantz_core)
         @o
         @Action()
         def measure(self, quantity, **kwargs):
@@ -232,7 +228,7 @@ class KeysightE3631A(_KeysightE363XA):
             """
             with self.lock:
                 self.parent.write('INSTR:SELECT %s' % self.id)
-                super(type(self), self).measure(quantity, **kwargs)
+                super(KeysightE3631A.output, self).measure(quantity, **kwargs)
 
         @o
         @Action()
@@ -242,7 +238,7 @@ class KeysightE3631A(_KeysightE363XA):
             """
             with self.lock:
                 self.parent.write('INSTR:SELECT %s' % self.id)
-                super(type(self), self).apply(voltage, current)
+                super(KeysightE3631A.output, self).apply(voltage, current)
 # XXXX
         @o
         @Action()
@@ -273,8 +269,8 @@ class KeysightE3631A(_KeysightE363XA):
 
                 """
                 with self.lock:
-                    self.write('INSTR:SELECT %s' % self.id)
-                    super(type(self), self).arm()
+                    self.parent.parent.write('INSTR:SELECT %s' % self.id)
+                    super(KeysightE3631A.output.trigger, self).arm()
 
         @o
         def default_get_feature(self, feat, cmd, *args, **kwargs):

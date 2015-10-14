@@ -11,9 +11,9 @@
 from __future__ import (division, unicode_literals, print_function,
                         absolute_import)
 
-from lantz_core import (set_feat, channel, conditional, Action)
+from lantz_core import (set_feat, channel, Action)
 from lantz_core.limits import FloatLimitsValidator
-from lantz_core.features import Unicode
+from lantz_core.features import Unicode, conditional
 from lantz_core.unit import to_float
 
 from ..base.dc_sources import DCPowerSource

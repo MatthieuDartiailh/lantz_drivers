@@ -20,9 +20,9 @@ class DCPowerSource(HasFeatures):
     """
 
     #:
-    outputs = channel((0,))
+    output = channel((0,))
 
-    with outputs as o:
+    with output as o:
 
         #:
         o.enabled = Bool(aliases={True: ['On', 'ON', 'On'],
